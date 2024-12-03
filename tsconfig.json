@@ -29,7 +29,8 @@
     "./hardhat.config.ts",
     "./scripts",
     "./test",
-    ".next/types/**/*.ts"
+    ".next/types/**/*.ts",
+    "./app/**/*"  // 添加这一行
   ],
   "exclude": [
     "node_modules"
