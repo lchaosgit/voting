@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { ethers } from 'ethers';
 import VotingContract from '../abis/VotingV2.json';
 
-const votingAddress = '0x5FbDB2315678afecb367f032d93F642f64180aa3';
+const votingAddress = '0xfB70fb2Ea8D9429404df656A867e536cA7Ac228D';
 
 export default function CreateQuestion() {
   const [title, setTitle] = useState('');
@@ -39,14 +39,21 @@ export default function CreateQuestion() {
 
     setLoading(true);
     try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
+      const provider = new ethers.BrowserProvider(window.ethereum as any);
       const signer = await provider.getSigner();
-      const contract = new ethers.Contract(votingAddress, VotingContract.abi, signer);
+      const contract = new ethers.Contract(votingAddress, VotingContract, signer);
 
       const tx = await contract.createQuestion(title, options);
-      await tx.wait();
+      const receipt = await tx.wait();
+      
+      const result = await contract.getQuestion(receipt.logs[0].args[0]);
+      const [questionTitle, _, optionTexts] = result;
 
-      setSuccess('投票问题创建成功！');
+      setSuccess(`投票创建成功！
+        标题：${questionTitle}
+        选项：${optionTexts.join(', ')}
+        投票ID：${receipt.logs[0].args[0]}`);
+      
       setTitle('');
       setOptions(['', '']);
       setError('');
@@ -69,7 +76,7 @@ export default function CreateQuestion() {
         )}
 
         {success && (
-          <div className="bg-green-500 text-white p-4 rounded-lg mb-6">
+          <div className="bg-green-500 text-white p-4 rounded-lg mb-6 whitespace-pre-line">
             {success}
           </div>
         )}

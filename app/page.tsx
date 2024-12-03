@@ -55,7 +55,7 @@ export default function Home() {
 
   const checkVoteStatus = async (address: string) => {
     const provider = new ethers.providers.Web3Provider(window.ethereum);
-    const contract = new ethers.Contract(votingAddress, VotingContract.abi, provider);
+    const contract = new ethers.Contract(votingAddress, VotingContract, provider);
     const voted = await contract.voted(address);
     setHasVoted(voted);
     if (voted) {
@@ -68,7 +68,7 @@ export default function Home() {
     setLoading(true);
     try {
       const provider = new ethers.providers.Web3Provider(window.ethereum);
-      const contract = new ethers.Contract(votingAddress, VotingContract.abi, provider);
+      const contract = new ethers.Contract(votingAddress, VotingContract, provider);
 
       const options = ['张三', '李四', '王五'];
       let votesMap = new Map<string, number>();
@@ -93,7 +93,7 @@ export default function Home() {
     try {
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = await provider.getSigner();
-      const contract = new ethers.Contract(votingAddress, VotingContract.abi, signer);
+      const contract = new ethers.Contract(votingAddress, VotingContract, signer);
 
       const transaction = await contract.vote(
         ethers.encodeBytes32String(option),
@@ -120,7 +120,7 @@ export default function Home() {
     try {
       const provider = new ethers.providers.Web3Provider(window.ethereum);
       const signer = await provider.getSigner();
-      const contract = new ethers.Contract(votingAddress, VotingContract.abi, signer);
+      const contract = new ethers.Contract(votingAddress, VotingContract, signer);
 
       const transaction = await contract.withdraw();
       await transaction.wait();

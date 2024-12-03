@@ -8,6 +8,7 @@ contract VotingV2 {
         bytes32 id;
         string title;
         bytes32[] options;
+        string[] optionTexts;
         mapping(bytes32 => uint256) votes;
         mapping(address => bool) hasVoted;
         bool isActive;
@@ -26,8 +27,10 @@ contract VotingV2 {
         _;
     }
 
-    function createQuestion(string memory title, string[] memory optionTexts) public {
-        bytes32 questionId = keccak256(abi.encodePacked(title, block.timestamp));
+    function createQuestion(string memory title, string[] memory optionTexts) public 
+        returns (bytes32 questionId, string memory questionTitle, string[] memory options) 
+    {
+        questionId = keccak256(abi.encodePacked(title, block.timestamp));
         Question storage newQuestion = questions[questionId];
         newQuestion.id = questionId;
         newQuestion.title = title;
@@ -36,31 +39,35 @@ contract VotingV2 {
         for(uint i = 0; i < optionTexts.length; i++) {
             bytes32 option = keccak256(abi.encodePacked(optionTexts[i]));
             newQuestion.options.push(option);
+            newQuestion.optionTexts.push(optionTexts[i]);
         }
 
         questionIds.push(questionId);
         emit QuestionCreated(questionId, title);
+
+        return (questionId, title, optionTexts);
     }
 
-    function vote(bytes32 questionId, bytes32 option) public payable questionExists(questionId) {
+    function vote(bytes32 questionId, string memory option) public payable questionExists(questionId) {
         Question storage question = questions[questionId];
         require(!question.hasVoted[msg.sender], "You have already voted on this question");
         require(msg.value > 0, "You need to send some ether to vote");
         
+        bytes32 optionHash = keccak256(abi.encodePacked(option));
         bool validOption = false;
         for(uint i = 0; i < question.options.length; i++) {
-            if(question.options[i] == option) {
+            if(question.options[i] == optionHash) {
                 validOption = true;
                 break;
             }
         }
         require(validOption, "Invalid option");
 
-        question.votes[option]++;
+        question.votes[optionHash]++;
         question.hasVoted[msg.sender] = true;
         balances[msg.sender][questionId] += msg.value;
         
-        emit Voted(msg.sender, questionId, option, question.votes[option]);
+        emit Voted(msg.sender, questionId, optionHash, question.votes[optionHash]);
     }
 
     function getQuestionCount() public view returns (uint256) {
@@ -71,6 +78,7 @@ contract VotingV2 {
         returns (
             string memory title,
             bytes32[] memory options,
+            string[] memory optionTexts,
             bool isActive
         )
     {
@@ -78,14 +86,16 @@ contract VotingV2 {
         return (
             question.title,
             question.options,
+            question.optionTexts,
             question.isActive
         );
     }
 
-    function getVoteCount(bytes32 questionId, bytes32 option) public view questionExists(questionId) 
+    function getVoteCount(bytes32 questionId, string memory option) public view questionExists(questionId) 
         returns (uint256)
-    {
-        return questions[questionId].votes[option];
+    {   
+        bytes32 optionHash = keccak256(abi.encodePacked(option));
+        return questions[questionId].votes[optionHash];
     }
 
     function hasVoted(bytes32 questionId, address voter) public view questionExists(questionId) 

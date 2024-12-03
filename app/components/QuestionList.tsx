@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import VotingContract from '../abis/VotingV2.json';
 
-const votingAddress = '0x5FbDB2315678afecb367f032d93F642f64180aa3';
+const votingAddress = '0xfB70fb2Ea8D9429404df656A867e536cA7Ac228D';
 
 interface Question {
   id: string;
@@ -25,8 +25,13 @@ export default function QuestionList() {
   const [showVoteModal, setShowVoteModal] = useState(false);
 
   useEffect(() => {
+    if (account) {
+      fetchQuestions();
+    }
+  }, [account]);
+
+  useEffect(() => {
     connectWallet();
-    fetchQuestions();
   }, []);
 
   const connectWallet = async () => {
@@ -35,6 +40,7 @@ export default function QuestionList() {
         const provider = new ethers.BrowserProvider(window.ethereum);
         const accounts = await provider.send("eth_requestAccounts", []);
         if (accounts.length > 0) {
+          console.log('accounts[0]: ', accounts[0]);
           setAccount(accounts[0]);
         }
       }
@@ -45,37 +51,46 @@ export default function QuestionList() {
   };
 
   const fetchQuestions = async () => {
+    console.log('开始获取问题列表...');
     setLoading(true);
     try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const contract = new ethers.Contract(votingAddress, VotingContract.abi, provider);
+      const provider = new ethers.BrowserProvider(window.ethereum as any);
+      const contract = new ethers.Contract(votingAddress, VotingContract, provider);
       
       const questionCount = await contract.getQuestionCount();
+      console.log(`总问题数: ${questionCount}`);
       const fetchedQuestions: Question[] = [];
 
       for (let i = 0; i < questionCount; i++) {
+        console.log(`正在获取第 ${i + 1}/${questionCount} 个问题...`);
         const questionId = await contract.questionIds(i);
-        const question = await contract.getQuestion(questionId);
-        const hasVoted = await contract.hasVoted(questionId, account);
+        console.log(`问题ID: ${questionId}`);
         
+        const [title, options, optionTexts, isActive] = await contract.getQuestion(questionId);
+
+        const hasVoted = await contract.hasVoted(questionId, account);
+        console.log(`当前账户是否已投票: ${hasVoted}`);
+    
         const voteCounts = await Promise.all(
-          question.options.map((option: string) => 
-            contract.getVoteCount(questionId, option)
+          optionTexts.map((optionText: string) => 
+            contract.getVoteCount(questionId, optionText)
           )
         );
-
+        console.log(`各选项得票数:`, voteCounts.map(count => Number(count)));
+  
         fetchedQuestions.push({
           id: questionId,
-          title: question.title,
-          options: question.options,
+          title: title,
+          options: optionTexts,  // 使用选项文本而不是哈希值
           voteCounts: voteCounts.map(count => Number(count)),
           hasVoted
         });
       }
 
+      console.log('问题列表获取完成:', fetchedQuestions);
       setQuestions(fetchedQuestions);
     } catch (error) {
-      console.error('Failed to fetch questions:', error);
+      console.error('获取问题列表失败:', error);
       setError('获取问题列表失败');
     }
     setLoading(false);
@@ -89,9 +104,9 @@ export default function QuestionList() {
 
     setLoading(true);
     try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
+      const provider = new ethers.BrowserProvider(window.ethereum as any);
       const signer = await provider.getSigner();
-      const contract = new ethers.Contract(votingAddress, VotingContract.abi, signer);
+      const contract = new ethers.Contract(votingAddress, VotingContract, signer);
 
       const tx = await contract.vote(
         selectedQuestion.id,

@@ -3,7 +3,7 @@ import { ethers } from 'ethers';
 import { useRouter } from 'next/navigation';
 import VotingContract from '../abis/VotingV2.json';
 
-const votingAddress = '0x5FbDB2315678afecb367f032d93F642f64180aa3';
+const votingAddress = '0xfB70fb2Ea8D9429404df656A867e536cA7Ac228D';
 
 interface VotingStatus {
   questionId: string;
@@ -31,7 +31,7 @@ export default function Profile() {
         
         if (accounts.length > 0) {
           setAccount(accounts[0]);
-          const contract = new ethers.Contract(votingAddress, VotingContract.abi, provider);
+          const contract = new ethers.Contract(votingAddress, VotingContract, provider);
           
           // 获取ETH余额
           const ethBalance = await provider.getBalance(accounts[0]);
