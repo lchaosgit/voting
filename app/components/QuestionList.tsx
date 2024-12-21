@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import VotingContract from '../abis/VotingV2.json';
 
@@ -12,7 +12,24 @@ interface Question {
   options: string[];
   voteCounts: number[];
   hasVoted: boolean;
+  imageUrls?: string[];
+  timestamp?: number;
 }
+
+interface Filters {
+  search: string;
+  filterType: 'all' | 'active' | 'notVoted';
+  sortBy: 'newest' | 'mostVotes';
+}
+
+const VoteProgressBar = ({ count, total }: { count: number; total: number }) => (
+  <div className="w-full bg-gray-700 rounded-full h-2.5">
+    <div
+      className="bg-blue-600 h-2.5 rounded-full transition-all duration-500"
+      style={{ width: `${total > 0 ? (count / total) * 100 : 0}%` }}
+    />
+  </div>
+);
 
 export default function QuestionList() {
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -23,6 +40,26 @@ export default function QuestionList() {
   const [selectedOption, setSelectedOption] = useState('');
   const [amount, setAmount] = useState('0.01');
   const [showVoteModal, setShowVoteModal] = useState(false);
+  const [filters, setFilters] = useState<Filters>({
+    search: '',
+    filterType: 'all',
+    sortBy: 'newest'
+  });
+
+  const connectWallet = async () => {
+    try {
+      if (window.ethereum) {
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const accounts = await provider.send("eth_requestAccounts", []);
+        if (accounts.length > 0) {
+          setAccount(accounts[0]);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to connect wallet:', error);
+      setError('连接钱包失败');
+    }
+  };
 
   useEffect(() => {
     if (account) {
@@ -34,22 +71,6 @@ export default function QuestionList() {
     connectWallet();
   }, []);
 
-  const connectWallet = async () => {
-    try {
-      if (window.ethereum) {
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        const accounts = await provider.send("eth_requestAccounts", []);
-        if (accounts.length > 0) {
-          console.log('accounts[0]: ', accounts[0]);
-          setAccount(accounts[0]);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to connect wallet:', error);
-      setError('连接钱包失败');
-    }
-  };
-
   const fetchQuestions = async () => {
     console.log('开始获取问题列表...');
     setLoading(true);
@@ -58,47 +79,68 @@ export default function QuestionList() {
       const contract = new ethers.Contract(votingAddress, VotingContract, provider);
       
       const questionCount = await contract.getQuestionCount();
-      console.log(`总问题数: ${questionCount}`);
       const fetchedQuestions: Question[] = [];
 
       for (let i = 0; i < questionCount; i++) {
-        console.log(`正在获取第 ${i + 1}/${questionCount} 个问题...`);
         const questionId = await contract.questionIds(i);
-        console.log(`问题ID: ${questionId}`);
-        
         const [title, options, optionTexts, isActive] = await contract.getQuestion(questionId);
 
         const hasVoted = await contract.hasVoted(questionId, account);
-        console.log(`当前账户是否已投票: ${hasVoted}`);
-    
         const voteCounts = await Promise.all(
-          optionTexts.map((optionText: string) => 
-            contract.getVoteCount(questionId, optionText)
-          )
+          optionTexts.map((optionText: string) => contract.getVoteCount(questionId, optionText))
         );
-        console.log(`各选项得票数:`, voteCounts.map(count => Number(count)));
-  
+
         fetchedQuestions.push({
           id: questionId,
           title: title,
-          options: optionTexts,  // 使用选项文本而不是哈希值
-          voteCounts: voteCounts.map(count => Number(count)),
+          options: optionTexts,
+          voteCounts: voteCounts.map((count: any) => Number(count)),
           hasVoted
         });
       }
 
-      console.log('问题列表获取完成:', fetchedQuestions);
       setQuestions(fetchedQuestions);
     } catch (error) {
-      console.error('获取问题列表失败:', error);
+      console.error('Failed to fetch questions:', error);
       setError('获取问题列表失败');
     }
     setLoading(false);
   };
 
-  const vote = async () => {
-    if (!selectedQuestion || !selectedOption || !amount) {
-      setError('请选择选项并输入投票金额');
+  const filterQuestions = (questions: Question[]) => {
+    return questions.filter(q => {
+      const matchesSearch = q.title.toLowerCase().includes(filters.search.toLowerCase());
+      switch (filters.filterType) {
+        case 'active':
+          return matchesSearch && !q.hasVoted;
+        case 'notVoted':
+          return matchesSearch && !q.hasVoted;
+        default:
+          return matchesSearch;
+      }
+    });
+  };
+
+  const sortQuestions = (questions: Question[]) => {
+    return [...questions].sort((a, b) => {
+      if (filters.sortBy === 'mostVotes') {
+        const totalVotesA = a.voteCounts.reduce((sum, count) => sum + count, 0);
+        const totalVotesB = b.voteCounts.reduce((sum, count) => sum + count, 0);
+        return totalVotesB - totalVotesA;
+      }
+      return Number(b.timestamp || 0) - Number(a.timestamp || 0);
+    });
+  };
+
+  const openVoteModal = (question: Question) => {
+    setSelectedQuestion(question);
+    setSelectedOption('');
+    setShowVoteModal(true);
+  };
+
+  const handleVote = async () => {
+    if (!selectedQuestion || !selectedOption) {
+      setError('请选择投票选项');
       return;
     }
 
@@ -111,13 +153,13 @@ export default function QuestionList() {
       const tx = await contract.vote(
         selectedQuestion.id,
         selectedOption,
-        { value: ethers.parseUnits(amount, 18) }
+        { value: ethers.parseEther(amount) }
       );
 
       await tx.wait();
       setShowVoteModal(false);
       await fetchQuestions();
-      setError('投票成功！');
+      setError('');
     } catch (error) {
       console.error('Vote failed:', error);
       setError('投票失败，请重试');
@@ -125,18 +167,42 @@ export default function QuestionList() {
     setLoading(false);
   };
 
-  const openVoteModal = (question: Question) => {
-    setSelectedQuestion(question);
-    setShowVoteModal(true);
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white p-8">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-4xl font-bold mb-8 text-center">投票问题列表</h1>
         
+        <div className="mb-6">
+          <input
+            type="text"
+            placeholder="搜索投票..."
+            value={filters.search}
+            onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+            className="w-full bg-gray-700 rounded-lg p-3 mb-4"
+          />
+          
+          <div className="flex gap-4 mb-4">
+            <select
+              value={filters.filterType}
+              onChange={(e) => setFilters({ ...filters, filterType: e.target.value as Filters['filterType'] })}
+              className="bg-gray-700 rounded-lg p-2"
+            >
+              <option value="all">全部投票</option>
+              <option value="active">未投票</option>
+            </select>
+
+            <select
+              value={filters.sortBy}
+              onChange={(e) => setFilters({ ...filters, sortBy: e.target.value as 'newest' | 'mostVotes' })}
+              className="bg-gray-700 rounded-lg p-2"
+            >
+              <option value="newest">最新</option>
+              <option value="mostVotes">最多投票</option>
+            </select>
+          </div>
+        </div>
+
         {error && (
-          <div className="bg-red-500 text-white p-4 rounded-lg mb-4">
+          <div className="bg-red-500 text-white p-4 rounded-lg mb-6">
             {error}
           </div>
         )}
@@ -145,89 +211,80 @@ export default function QuestionList() {
           <div className="text-center">加载中...</div>
         ) : (
           <div className="grid gap-6">
-            {questions.map((question) => (
-              <div key={question.id} className="bg-gray-800 rounded-lg p-6 shadow-lg">
+            {sortQuestions(filterQuestions(questions)).map((question) => (
+              <div key={question.id} className="bg-gray-800 rounded-lg p-6">
                 <h2 className="text-2xl font-bold mb-4">{question.title}</h2>
-                
                 <div className="space-y-4">
                   {question.options.map((option, index) => (
-                    <div key={index} className="flex justify-between items-center bg-gray-700 p-4 rounded-lg">
-                      <span>{option}</span>
-                      <span>{question.voteCounts[index]} 票</span>
+                    <div key={index} className="bg-gray-700 p-4 rounded-lg">
+                      <div className="flex justify-between items-center mb-2">
+                        <span>{option}</span>
+                        <span>{question.voteCounts[index]} 票</span>
+                      </div>
+                      <VoteProgressBar
+                        count={question.voteCounts[index]}
+                        total={question.voteCounts.reduce((a, b) => a + b, 0)}
+                      />
                     </div>
                   ))}
                 </div>
-
-                <div className="mt-6">
+                {!question.hasVoted && (
                   <button
                     onClick={() => openVoteModal(question)}
-                    disabled={question.hasVoted || loading}
-                    className={`w-full py-3 px-6 rounded-lg font-bold ${
-                      question.hasVoted
-                        ? 'bg-gray-600 cursor-not-allowed'
-                        : 'bg-blue-600 hover:bg-blue-700'
-                    }`}
+                    className="mt-4 bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg"
                   >
-                    {question.hasVoted ? '已投票' : '投票'}
+                    投票
                   </button>
-                </div>
+                )}
               </div>
             ))}
           </div>
         )}
-      </div>
 
-      {showVoteModal && selectedQuestion && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-gray-800 rounded-lg p-8 max-w-lg w-full">
-            <h2 className="text-2xl font-bold mb-6">{selectedQuestion.title}</h2>
-            
-            <div className="space-y-4 mb-6">
-              {selectedQuestion.options.map((option, index) => (
-                <button
-                  key={index}
-                  onClick={() => setSelectedOption(option)}
-                  className={`w-full p-4 rounded-lg text-left ${
-                    selectedOption === option
-                      ? 'bg-blue-600'
-                      : 'bg-gray-700 hover:bg-gray-600'
-                  }`}
-                >
-                  {option}
-                </button>
-              ))}
-            </div>
-
-            <div className="mb-6">
-              <label className="block text-gray-300 mb-2">投票金额 (ETH)</label>
+        {showVoteModal && selectedQuestion && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+            <div className="bg-gray-800 rounded-lg p-6 max-w-md w-full">
+              <h3 className="text-xl font-bold mb-4">投票 - {selectedQuestion.title}</h3>
+              <select
+                value={selectedOption}
+                onChange={(e) => setSelectedOption(e.target.value)}
+                className="w-full bg-gray-700 rounded-lg p-2 mb-4"
+              >
+                <option value="">选择选项</option>
+                {selectedQuestion.options.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
               <input
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                min="0.01"
-                step="0.01"
-                className="w-full bg-gray-700 rounded-lg p-3 text-white"
+                step="0.001"
+                min="0.001"
+                className="w-full bg-gray-700 rounded-lg p-2 mb-4"
+                placeholder="投票金额 (ETH)"
               />
-            </div>
-
-            <div className="flex justify-end space-x-4">
-              <button
-                onClick={() => setShowVoteModal(false)}
-                className="bg-gray-600 hover:bg-gray-700 px-6 py-3 rounded-lg"
-              >
-                取消
-              </button>
-              <button
-                onClick={vote}
-                disabled={!selectedOption || loading}
-                className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg disabled:opacity-50"
-              >
-                确认投票
-              </button>
+              <div className="flex justify-end gap-4">
+                <button
+                  onClick={() => setShowVoteModal(false)}
+                  className="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded-lg"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleVote}
+                  disabled={loading || !selectedOption}
+                  className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg disabled:opacity-50"
+                >
+                  {loading ? '处理中...' : '确认投票'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

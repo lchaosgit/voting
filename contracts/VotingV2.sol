@@ -9,6 +9,7 @@ contract VotingV2 {
         string title;
         bytes32[] options;
         string[] optionTexts;
+        address[] voters;
         mapping(bytes32 => uint256) votes;
         mapping(address => bool) hasVoted;
         bool isActive;
@@ -103,6 +104,18 @@ contract VotingV2 {
     {
         return questions[questionId].hasVoted[voter];
     }
+
+    function getVoters(bytes32 _questionId) public view returns (address[] memory) {
+    Question storage question = questions[_questionId];
+    return question.voters;
+    }
+
+
+    function getOptionVoters(bytes32 _questionId, string memory _option) public view returns (address[] memory) {
+        Question storage question = questions[_questionId];
+        return question.optionVoters[_option];
+    }
+
 
     function withdraw(bytes32 questionId) external questionExists(questionId) {
         uint256 amount = balances[msg.sender][questionId];

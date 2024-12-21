@@ -12,9 +12,11 @@ export default function CreateQuestion() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [optionCount, setOptionCount] = useState(1); // 新的状态来管理要添加的选项数量
 
-  const addOption = () => {
-    setOptions([...options, '']);
+  const addMultipleOptions = () => {
+    const newOptions = Array.from({ length: optionCount }, () => '');
+    setOptions([...options, ...newOptions]);
   };
 
   const removeOption = (index: number) => {
@@ -117,12 +119,22 @@ export default function CreateQuestion() {
               ))}
             </div>
 
-            <button
-              onClick={addOption}
-              className="mt-4 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg"
-            >
-              添加选项
-            </button>
+            <div className="mt-4">
+              <input
+                type="number"
+                min="1"
+                value={optionCount}
+                onChange={(e) => setOptionCount(parseInt(e.target.value))}
+                className="bg-gray-700 rounded-lg p-3 text-white mr-4"
+                placeholder="选项个数"
+              />
+              <button
+                onClick={addMultipleOptions}
+                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg"
+              >
+                添加选项
+              </button>
+            </div>
           </div>
 
           <div className="flex justify-end">
